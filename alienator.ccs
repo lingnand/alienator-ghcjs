@@ -2,7 +2,9 @@
   <PropertyGroup Name="alienator" Version="2.3.3.0" Type="CocosStudio" />
   <SolutionFolder>
     <Group ctype="ResourceGroup">
-      <RootFolder Name="." />
+      <RootFolder Name=".">
+        <Project Name="spaceship.csd" Type="Skeleton" />
+      </RootFolder>
     </Group>
   </SolutionFolder>
 </Solution>

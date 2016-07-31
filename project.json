@@ -12,8 +12,8 @@
     "modules" : ["cocos2d", "cocostudio", "chipmunk"],
 
     "jsList" : [
-        "js/rts.js",
-        "js/lib.js",
-        "js/out.js"
+        "dist/build/target/target.jsexe/rts.js",
+        "dist/build/target/target.jsexe/lib.js",
+        "dist/build/target/target.jsexe/out.js"
     ]
 }
