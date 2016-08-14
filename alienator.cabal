@@ -49,6 +49,7 @@ library
     exposed-modules  : Alienator.Main,
                        Alienator.Pool,
                        Alienator.Actuator
+                       Alienator.PhysicsSprite
     build-depends    : base,
                        containers,
                        transformers,

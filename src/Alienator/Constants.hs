@@ -1,6 +1,12 @@
 module Alienator.Constants
   (
+    CollisionType(..)
   ) where
 
-data CollisionType = RoundBullet deriving (Enum, Show, Read)
+data CollisionType = Wall
+                   | PlayerBullet
+                   | EnemyBullet
+                   | PlayerShip
+                   | EnemyShip
+   deriving (Enum, Show, Read, Eq)
 

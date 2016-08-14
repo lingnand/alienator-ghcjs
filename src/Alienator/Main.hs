@@ -1,21 +1,36 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Alienator.Main
   (
     main
   ) where
 
+import Control.Monad
 import Reflex.Cocos2d.Prelude
 
-import Alienator.Bullet
-import Control.Monad
+import Alienator.GamePlayScene
+import Alienator.Constants
+
 
 main :: IO ()
 main = do
     setAdjustViewPort True
     setDesignResolutionSize 960 640 ShowAll
     setResizeWithBrowserSize True
+    winSize <- getWinSize
+    g <- getStdGen
     mainScene $ do
       tickE <- ticks
-      sp <- space tickE []
-      void $ flip runDynStateT (Mover (20^&20) (3^&3)) $ do
-        liftDynReader $ magnifyDyn (to moverToBulletProps) (bullet "res/img/bullet.png" RoundBullet sp)
-        modifyDyn $ moverTickReducer <$> tickE
+      uiE <- uiEvents
+      keysDyn <- dynKeysDown (uiE^.keyPressed) (uiE^.keyReleased)
+      sp <- space tickE [ iterations := 2 ]
+      -- walls
+      staticBody sp [ fixtures      := [
+                        def & shape .~ Segment 0 a b
+                      | let rectPts = uncurry rect $ unr2 winSize
+                      , (a, b) <- zip rectPts (tail $ cycle rectPts)
+                      ]
+                    , position      := 0 .+^ winSize/2
+                    , collisionType := Wall
+                    ]
+      void $ flip runDynStateT (initGamePlaySceneState winSize) $ do
+          gamePlayScene g winSize sp keysDyn tickE
