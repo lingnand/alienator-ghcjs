@@ -11,6 +11,7 @@ module Alienator.PhysicsSprite
   , HasCType(..)
   , HasFixs(..)
   , HasSprName(..)
+  , HasEnabled(..)
   , physicsSprite
   ) where
 
@@ -24,6 +25,7 @@ data PhysicsSpriteState ac ct = PhysicsSpriteState
                               , _physicsSpriteStateCType    :: ct
                               , _physicsSpriteStateFixs     :: [Fixture]
                               , _physicsSpriteStateSprName  :: String
+                              , _physicsSpriteStateEnabled  :: Bool
                               } deriving (Show, Eq)
 makeFields ''PhysicsSpriteState
 
@@ -34,6 +36,7 @@ instance (Enum ct, Default ac) => Default (PhysicsSpriteState ac ct) where
         , _physicsSpriteStateCType    = toEnum 0
         , _physicsSpriteStateFixs     = []
         , _physicsSpriteStateSprName  = ""
+        , _physicsSpriteStateEnabled  = False
         }
 
 -- def & shape .~ Segment 0 (-0.1) (0.1) -- just a point of contact
@@ -45,14 +48,17 @@ physicsSprite sp ticks = do
     trDyn <- asksNubDyn (toTrans . (^.actuator))
     cTypeDyn <- asksNubDyn (^.cType)
     fixsDyn <- asksNubDyn (^.fixs)
+    enabledDyn <- asksNubDyn (^.enabled)
+    fixsDyn' <- combineDyn (\enabled fixs -> if enabled then fixs else []) enabledDyn fixsDyn
     -- periodically update the actuator
-    modifyDyn $ (actuator %~) . updateTick <$> ticks
-    b <- staticBody sp [ dyn' fixtures     := fixsDyn
+    modifyDyn $ (actuator %~) . updateTick <$> (gate (current enabledDyn) ticks)
+    b <- staticBody sp [ dyn' fixtures      := fixsDyn'
                        , dyn' transform     := trDyn
                        , dyn' collisionType := cTypeDyn
                        ]
     sprNameDyn <- asksDyn (^.sprName)
     sprite_ [ dyn transform  := b^.transDyn
             , dyn spriteName := sprNameDyn
+            , dyn visible    := enabledDyn
             ]
     return $ (^.otherCollisionType) <$> (b^.collisionBegan)

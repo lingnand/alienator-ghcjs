@@ -58,6 +58,7 @@ initGamePlaySceneState winSize =
                                                            & mass  .~ 5000
                                                      ]
                                    & sprName      .~ "res/img/player.png"
+                                   & enabled      .~ True
                   }
     , _enemyShipPool = P.fromList $ replicate 10 def
     }
@@ -75,6 +76,7 @@ bullet ct p v acc = def & actuator .~ AnyActuator accelAct
                                             & sensor .~ True
                                       ]
                         & sprName  .~ "res/img/bullet.png"
+                        & enabled  .~ True
     where accelAct :: AccelActuator
           accelAct = def & pos .~ p
                          & vel .~ v
@@ -105,16 +107,14 @@ getRandomV2 (V2 fx fy, V2 tx ty) = do
     y <- getRandomR (fy, ty)
     return $ x^&y
 
-gamePlayScene :: (NodeGraph t m, RandomGen g)
-              => g                       -- ^ Random Generator
-              -> V2 Double               -- ^ window size
+gamePlayScene :: (NodeGraph t m)
+              => V2 Double               -- ^ window size
               -> DynSpace t              -- ^ physics space
               -> Dynamic t (S.Set Key)   -- ^ keys down
               -> Event t NominalDiffTime -- ^ ticks
               -> DynStateT GamePlaySceneState t m ()
-gamePlayScene g winSize sp keysDyn ticks = do
-    let bulletAnchorPos = 0.0 .+^ 2*winSize
-        bulletBaseAccel = 10.0
+gamePlayScene winSize sp keysDyn ticks = do
+    let bulletBaseAccel = 10.0
         playerBaseVel = 50.0
         playerBulletPosOffset = 100.0
         enemyBaseVel = playerBaseVel*2
@@ -128,7 +128,7 @@ gamePlayScene g winSize sp keysDyn ticks = do
         -- once hit the wall/ship/etc., anchor them and deactivate
         cTypeBeh <- asksBehavior (^.cType)
         let resetHits = attachWithMaybe (\x y -> guard $ bulletShouldReset x y) cTypeBeh hits
-        modifyDyn $ (actuator .~ AnyActuator (Anchor bulletAnchorPos)) <$ resetHits
+        modifyDyn $ (enabled .~ False) <$ resetHits
         return resetHits
       modifyDyn $ P.markIdle pid <$ hits
 
@@ -150,7 +150,7 @@ gamePlayScene g winSize sp keysDyn ticks = do
           hits <- physicsSprite sp ticks
           let resetHits = ffilter (`elem` [PlayerBullet, Wall]) hits
           onEvent_ resetHits . const . liftIO $ putStrLn $ show pid ++ ": enemy reset"
-          modifyDyn $ (actuator .~ (def & pos .~ bulletAnchorPos)) <$ resetHits
+          modifyDyn $ (enabled .~ False) <$ resetHits
           -- randomly add movement into the enemy
           maybeVelsE <- runRandEvent . ffor enemyReactuateFreqE . const $ runMaybeT $ do
             -- first randomly select whether we should reactuate in the first place
@@ -178,6 +178,7 @@ gamePlayScene g winSize sp keysDyn ticks = do
                                       & mass  .~ 6000
                                 ])
                  . (sprName  .~ "res/img/enemy" ++ show i ++ ".png")
+                 . (enabled  .~ True)
       modifyDyn $ P.modifyIdle <$> randSpawnEnemiesE
 
     -- generate bullets

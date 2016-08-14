@@ -17,7 +17,6 @@ main = do
     setDesignResolutionSize 960 640 ShowAll
     setResizeWithBrowserSize True
     winSize <- getWinSize
-    g <- getStdGen
     mainScene $ do
       tickE <- ticks
       uiE <- uiEvents
@@ -33,4 +32,4 @@ main = do
                     , collisionType := Wall
                     ]
       void $ flip runDynStateT (initGamePlaySceneState winSize) $ do
-          gamePlayScene g winSize sp keysDyn tickE
+          gamePlayScene winSize sp keysDyn tickE
