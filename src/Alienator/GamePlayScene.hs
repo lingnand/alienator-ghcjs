@@ -14,6 +14,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
+import Control.Monad.Free
 import Reflex.Cocos2d.Prelude
 
 import qualified Alienator.Pool as P
@@ -107,91 +108,108 @@ getRandomV2 (V2 fx fy, V2 tx ty) = do
     y <- getRandomR (fy, ty)
     return $ x^&y
 
+-- | add movement into enemy
+reactuateEnemyModifier :: MonadRandom m => Double -> m (VelActuator -> VelActuator)
+reactuateEnemyModifier enemyBaseVel = do
+    -- choose the angle
+    ang <- getRandomR (90, 270)
+    -- choose the velocity
+    v <- getRandomR (enemyBaseVel, enemyBaseVel*2)
+    return $ vel .~ (v *^ e (ang @@ deg))
+
 gamePlayScene :: (NodeGraph t m)
               => V2 Double               -- ^ window size
               -> DynSpace t              -- ^ physics space
               -> Dynamic t (S.Set Key)   -- ^ keys down
               -> Event t NominalDiffTime -- ^ ticks
               -> DynStateT GamePlaySceneState t m ()
-gamePlayScene winSize sp keysDyn ticks = do
+gamePlayScene winSize sp keysDyn ticks = void $ node [] <-< do
     let bulletBaseAccel = 10.0
         playerBaseVel = 50.0
         playerBulletPosOffset = 100.0
-        enemyBaseVel = playerBaseVel*2
+        enemyBaseVel = playerBaseVel*1.5
         enemyShipContour = 130^&80
+    (_, finished) <- lift . load $ [ "res/img/enemy" ++ show i ++ ".png"
+                                   | i <- [0..3] :: [Int]
+                                   ]
+                                   ++
+                                   [ "res/img/bullet.png"
+                                   , "res/img/player.png" ]
+    liftF finished
 
-    -- render bullets
-    zoomDyn bulletPool $ P.buildPoolDiff_ $ \pid ps -> do
-      hits <- zoomDyn (at pid . pnon ps) $ do
-        hits <- physicsSprite sp ticks
-        -- onEvent_ hits $ \ct -> liftIO . putStrLn $ show id ++ ": Got hit with " ++ show ct
-        -- once hit the wall/ship/etc., anchor them and deactivate
-        cTypeBeh <- asksBehavior (^.cType)
-        let resetHits = attachWithMaybe (\x y -> guard $ bulletShouldReset x y) cTypeBeh hits
-        modifyDyn $ (enabled .~ False) <$ resetHits
-        return resetHits
-      modifyDyn $ P.markIdle pid <$ hits
-
-    -- render player ship
-    zoomDyn playerShip $ do
-      zoomDyn pSprite $ do
-        hits <- physicsSprite sp ticks
-        onEvent hits $ \case
-          EnemyBullet -> liftIO $ putStrLn "Hit by bullet!"
-          _ -> return ()
-        modifyDyn $ ffor (updated keysDyn) $
-          \ks -> actuator.vel .~ playerBaseVel *^ (foldr ((+) . keyToUnitV) 0 ks)
-
-    -- render the enemy ships
-    zoomDyn enemyShipPool $ do
-      enemyReactuateFreqE <- dilate 2 ticks
-      P.buildPoolDiff_ $ \pid ps -> do
+    lift $ do
+      -- render bullets
+      zoomDyn bulletPool $ P.buildPoolDiff_ $ \pid ps -> do
         hits <- zoomDyn (at pid . pnon ps) $ do
           hits <- physicsSprite sp ticks
-          let resetHits = ffilter (`elem` [PlayerBullet, Wall]) hits
-          onEvent_ resetHits . const . liftIO $ putStrLn $ show pid ++ ": enemy reset"
+          -- onEvent_ hits $ \ct -> liftIO . putStrLn $ show id ++ ": Got hit with " ++ show ct
+          -- once hit the wall/ship/etc., anchor them and deactivate
+          cTypeBeh <- asksBehavior (^.cType)
+          let resetHits = attachWithMaybe (\x y -> guard $ bulletShouldReset x y) cTypeBeh hits
           modifyDyn $ (enabled .~ False) <$ resetHits
-          -- randomly add movement into the enemy
-          maybeVelsE <- runRandEvent . ffor enemyReactuateFreqE . const $ runMaybeT $ do
-            -- first randomly select whether we should reactuate in the first place
-            MaybeT $ pick [ (0.4, Just ())
-                          , (0.6, Nothing)
-                          ]
-            -- choose the angle
-            ang <- lift $ getRandomR (90, 270)
-            -- choose the velocity
-            vel <- lift $ getRandomR (0.0, enemyBaseVel)
-            return $ vel *^ e (ang @@ deg)
-          modifyDyn $ (actuator.vel .~) <$> fmapMaybe id maybeVelsE
           return resetHits
         modifyDyn $ P.markIdle pid <$ hits
 
-      -- generate enemies
-      enemySpawnFreqE <- dilate 5 ticks
-      randSpawnEnemiesE :: Event t (PSpriteState' VelActuator -> PSpriteState' VelActuator)
-        <- runRandEvent . ffor enemySpawnFreqE . const $ do
-          rv2 <- getRandomV2 (winSize & _x *~ 0.75 & _y *~ 0.25, winSize & _y *~ 0.75)
-          i :: Int <- getRandomR (0, 3) -- the enemy type
-          return $ (actuator .~ (def & pos .~ 0 .+^ rv2))
-                 . (cType    .~ EnemyShip)
-                 . (fixs     .~ [ def & shape .~ Poly (uncurry rect $ unr2 enemyShipContour)
-                                      & mass  .~ 6000
-                                ])
-                 . (sprName  .~ "res/img/enemy" ++ show i ++ ".png")
-                 . (enabled  .~ True)
-      modifyDyn $ P.modifyIdle <$> randSpawnEnemiesE
+      -- render player ship
+      zoomDyn playerShip $ do
+        zoomDyn pSprite $ do
+          hits <- physicsSprite sp ticks
+          onEvent hits $ \case
+            EnemyBullet -> liftIO $ putStrLn "Hit by bullet!"
+            _ -> return ()
+          modifyDyn $ ffor (updated keysDyn) $
+            \ks -> actuator.vel .~ playerBaseVel *^ (foldr ((+) . keyToUnitV) 0 ks)
 
-    -- generate bullets
-    bulletFreqE <- dilate 0.8 ticks
-    let onBulletFreq ks _ | S.member Space ks = Just ()
-                          | otherwise = Nothing
-        bulletFireE = attachDynWithMaybe onBulletFreq keysDyn bulletFreqE
-        playerBulletsGen gpState =
-          [ bullet PlayerBullet (gpState^.playerShip.pSprite.actuator.pos .+^ pOffset) v ac
-          | ang <- [30, 0, -30]
-          , let uv = e (ang @@ deg)
-                pOffset = playerBulletPosOffset *^ uv
-                v = (playerBaseVel*2.5) *^ uv
-                ac = bulletBaseAccel *^ uv
-          ]
-    modifyDyn $ fireBulletsModifier playerBulletsGen <$ bulletFireE
+      -- render the enemy ships
+      zoomDyn enemyShipPool $ do
+        enemyReactuateFreqE <- dilate 2 ticks
+        P.buildPoolDiff_ $ \pid ps -> do
+          hits <- zoomDyn (at pid . pnon ps) $ do
+            hits <- physicsSprite sp ticks
+            let resetHits = ffilter (`elem` [PlayerBullet, Wall]) hits
+            modifyDyn $ (enabled .~ False) <$ resetHits
+            enabledBeh <- asksBehavior (^.enabled)
+            let reactuateE = attachWithMaybe (\enabled _ -> guard enabled) enabledBeh enemyReactuateFreqE
+                -- randomly add movement into the enemy
+                maybeReactuateModifier :: MonadRandom m => m (Maybe (VelActuator -> VelActuator))
+                maybeReactuateModifier = runMaybeT $ do
+                    -- first randomly select whether we should reactuate in the first place
+                    MaybeT $ pick [ (0.4, Just ())
+                                  , (0.6, Nothing)
+                                  ]
+                    lift $ reactuateEnemyModifier enemyBaseVel
+            maybeModE <- runRandEvent $ maybeReactuateModifier <$ reactuateE
+            modifyDyn $ fmapMaybe ((actuator %~) <$>) maybeModE
+            return resetHits
+          modifyDyn $ P.markIdle pid <$ hits
+
+        -- generate enemies
+        enemySpawnFreqE <- dilate 5 ticks
+        randSpawnEnemiesE :: Event t (PSpriteState' VelActuator -> PSpriteState' VelActuator)
+          <- runRandEvent . ffor enemySpawnFreqE . const $ do
+            rv2 <- getRandomV2 (winSize & _x *~ 0.7 & _y *~ 0.25, winSize & _x *~ 0.9 & _y *~ 0.75)
+            i :: Int <- getRandomR (0, 3) -- the enemy type
+            modifier <- reactuateEnemyModifier enemyBaseVel
+            return $ (actuator .~ (def & pos .~ 0 .+^ rv2 & modifier))
+                   . (cType    .~ EnemyShip)
+                   . (fixs     .~ [ def & shape .~ Poly (uncurry rect $ unr2 enemyShipContour)
+                                        & mass  .~ 6000
+                                  ])
+                   . (sprName  .~ "res/img/enemy" ++ show i ++ ".png")
+                   . (enabled  .~ True)
+        modifyDyn $ P.modifyIdle <$> randSpawnEnemiesE
+
+      -- generate bullets
+      bulletFreqE <- dilate 0.8 ticks
+      let onBulletFreq ks _ | S.member Space ks = Just ()
+                            | otherwise = Nothing
+          bulletFireE = attachDynWithMaybe onBulletFreq keysDyn bulletFreqE
+          playerBulletsGen gpState =
+            [ bullet PlayerBullet (gpState^.playerShip.pSprite.actuator.pos .+^ pOffset) v ac
+            | ang <- [30, 0, -30]
+            , let uv = e (ang @@ deg)
+                  pOffset = playerBulletPosOffset *^ uv
+                  v = (playerBaseVel*5) *^ uv
+                  ac = bulletBaseAccel *^ uv
+            ]
+      modifyDyn $ fireBulletsModifier playerBulletsGen <$ bulletFireE
