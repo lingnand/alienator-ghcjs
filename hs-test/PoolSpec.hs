@@ -9,10 +9,10 @@ spec :: Spec
 spec = do
     describe "empty" $ do
       prop "no elements" $ size empty == 0
-    describe "changeNextIdle" $ do
+    describe "putNextIdle" $ do
       prop "auto inserting new element" $ \(x::String) n ->
-        n < 0 || (elems $ iterate (snd . changeNextIdle x) empty !! n) == replicate n x
+        n < 0 || (elems $ iterate (putNextIdle x) empty !! n) == replicate n x
     describe "markIdle" $ do
       prop "element used and recycled goes back into pool" $ \(x::String) n ->
-        n <= 0 || (elems $ iterate (uncurry markIdle . changeNextIdle x) empty !! n) == [x]
+        n <= 0 || (elems $ iterate (uncurry markIdle . putNextIdle' x) empty !! n) == [x]
 

@@ -1,0 +1,155 @@
+{
+  "ID": "ecb3ecc9-0867-4de7-b667-9e928ed64682",
+  "Version": "2.3.3.0",
+  "Name": "Skeleton",
+  "Content": {
+    "Content": {
+      "Animation": {
+        "Duration": 18,
+        "Speed": 1.0,
+        "ActivedAnimationName": "animation0",
+        "Timelines": [
+          {
+            "ActionTag": 1409701656,
+            "Property": "Position",
+            "Frames": [
+              {
+                "X": -165.0,
+                "Y": 193.0,
+                "FrameIndex": 1,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "PointFrameData"
+              },
+              {
+                "X": -165.0,
+                "Y": 193.0,
+                "FrameIndex": 18,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "PointFrameData"
+              }
+            ],
+            "ctype": "TimelineData"
+          },
+          {
+            "ActionTag": 1409701656,
+            "Property": "Scale",
+            "Frames": [
+              {
+                "X": 1.0,
+                "Y": 1.0,
+                "FrameIndex": 1,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "ScaleValueFrameData"
+              },
+              {
+                "X": 1.0,
+                "Y": 1.0,
+                "FrameIndex": 18,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "ScaleValueFrameData"
+              }
+            ],
+            "ctype": "TimelineData"
+          },
+          {
+            "ActionTag": 1409701656,
+            "Property": "RotationSkew",
+            "Frames": [
+              {
+                "X": -22.1502,
+                "Y": -22.1502,
+                "FrameIndex": 1,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "ScaleValueFrameData"
+              },
+              {
+                "X": -62.5821,
+                "Y": -62.5821,
+                "FrameIndex": 18,
+                "EasingData": {
+                  "Type": 0
+                },
+                "ctype": "ScaleValueFrameData"
+              }
+            ],
+            "ctype": "TimelineData"
+          }
+        ],
+        "ctype": "TimelineActionData"
+      },
+      "AnimationList": [
+        {
+          "StartIndex": 1,
+          "EndIndex": 21,
+          "Name": "animation0",
+          "ctype": "AnimationInfoData"
+        }
+      ],
+      "ObjectData": {
+        "Length": 20.0,
+        "Position": {
+          "X": 0.0,
+          "Y": 0.0
+        },
+        "Scale": {
+          "ScaleX": 1.0,
+          "ScaleY": 1.0
+        },
+        "CColor": {},
+        "BlendFunc": {
+          "Src": 770,
+          "Dst": 771
+        },
+        "Tag": 1620,
+        "Children": [
+          {
+            "Length": 566.0,
+            "Position": {
+              "X": -165.0,
+              "Y": 193.0
+            },
+            "Scale": {
+              "ScaleX": 1.0,
+              "ScaleY": 1.0
+            },
+            "RotationSkewX": -34.0419,
+            "RotationSkewY": -34.0419,
+            "CColor": {},
+            "BlendFunc": {
+              "Src": 770,
+              "Dst": 771
+            },
+            "Tag": 1621,
+            "ActionTag": 1409701656,
+            "ZOrder": 1,
+            "Size": {
+              "X": 0.0,
+              "Y": 0.0
+            },
+            "Name": "Bone_1",
+            "ctype": "BoneNodeObjectData"
+          }
+        ],
+        "Size": {
+          "X": 0.0,
+          "Y": 0.0
+        },
+        "Name": "Skeleton",
+        "ctype": "SkeletonNodeObjectData"
+      },
+      "UsedResources": [],
+      "ctype": "GameFileData"
+    }
+  },
+  "Type": "Skeleton"
+}

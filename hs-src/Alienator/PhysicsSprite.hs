@@ -39,26 +39,24 @@ instance (Enum ct, Default ac) => Default (PhysicsSpriteState ac ct) where
         , _physicsSpriteStateEnabled  = False
         }
 
--- def & shape .~ Segment 0 (-0.1) (0.1) -- just a point of contact
 physicsSprite :: (NodeGraph t m, Eq ct, Enum ct, IsActuator ac)
-              => DynSpace t -- space
+              => DynSpace t ct -- space
               -> Event t NominalDiffTime
-              -> DynStateT (PhysicsSpriteState ac ct) t m (Event t ct) -- collision events
+              -> DynStateT t (PhysicsSpriteState ac ct) m (Event t ct) -- collision events
 physicsSprite sp ticks = do
-    trDyn <- asksNubDyn (toTrans . (^.actuator))
-    cTypeDyn <- asksNubDyn (^.cType)
-    fixsDyn <- asksNubDyn (^.fixs)
-    enabledDyn <- asksNubDyn (^.enabled)
-    fixsDyn' <- combineDyn (\enabled fixs -> if enabled then fixs else []) enabledDyn fixsDyn
+    sDyn <- watch
+    let enabledDyn = view enabled <$> sDyn
+        enabledBeh = current enabledDyn
+        fixsDyn = (\enabled -> if enabled then view fixs else const []) <$> enabledDyn <*> sDyn
     -- periodically update the actuator
-    modifyDyn $ (actuator %~) . updateTick <$> (gate (current enabledDyn) ticks)
-    b <- staticBody sp [ dyn' fixtures      := fixsDyn'
-                       , dyn' transform     := trDyn
-                       , dyn' collisionType := cTypeDyn
-                       ]
-    sprNameDyn <- asksDyn (^.sprName)
-    sprite_ [ dyn transform  := b^.transDyn
-            , dyn spriteName := sprNameDyn
-            , dyn visible    := enabledDyn
+    adjust $ over actuator . updateTick <$> gate enabledBeh ticks
+    -- b <- staticBody sp [ uDyn' fixtures      := fixsDyn
+    --                    , uDyn' transform     := views actuator toTrans <$> sDyn
+    --                    , uDyn' collisionType := view cType <$> sDyn
+    --                    ]
+    sprite_ [ dyn' transform  := uniqDyn (views actuator toTrans <$> sDyn)
+            , dyn' spriteName := uniqDyn (view sprName <$> sDyn)
+            , dyn' visible    := uniqDyn enabledDyn
             ]
-    return $ (^.otherCollisionType) <$> (b^.collisionBegan)
+    -- return $ view otherCollisionType <$> b^.collisionBegan
+    return never

@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
@@ -10,14 +11,19 @@ module Alienator.Pool
   , fromList
   , empty
   , elems
+  , idleIds
   , null
   , size
   , difference
   , foldrWithId
   , putNextIdle
+  , putNextIdle'
+  , putNextIdles
   , modifyIdle
   , markIdle
-  , buildPoolDiff_
+  , traverseWithId
+  , traverseWithId_
+  , buildDiffs
   ) where
 
 import Prelude hiding (null)
@@ -54,6 +60,9 @@ empty = Pool IM.empty IS.empty
 elems :: Pool a -> [a]
 elems = IM.elems . _elems
 
+idleIds :: Pool a -> [Id]
+idleIds = IS.elems . _idleElems
+
 null :: Pool a -> Bool
 null = IM.null . _elems
 
@@ -68,16 +77,22 @@ difference (Pool aElems aIdles) (Pool bElems _) = Pool (IM.difference aElems bEl
 foldrWithId :: (Id -> a -> b -> b) -> b -> Pool a -> b
 foldrWithId f b = IM.foldrWithKey f b . _elems
 
+putNextIdle :: a -> Pool a -> Pool a
+putNextIdle a = snd . putNextIdle' a
+
 -- change the next idle element to the given state
 -- if no idle element is available - insert a new element
-putNextIdle :: a -> Pool a -> Pool a
-putNextIdle a p@Pool{ _elems, _idleElems }
+putNextIdle' :: a -> Pool a -> (Id, Pool a)
+putNextIdle' a p@Pool{ _elems, _idleElems }
   | IS.null _idleElems =
     let key = IM.size _elems
-    in p{ _elems = IM.insert key a _elems }
+    in (key, p{ _elems = IM.insert key a _elems })
   | otherwise =
     let (key, idles') = IS.deleteFindMin _idleElems
-    in Pool{ _elems = IM.insert key a _elems, _idleElems = idles' }
+    in (key, Pool{ _elems = IM.insert key a _elems, _idleElems = idles' })
+
+putNextIdles :: [a] -> Pool a -> Pool a
+putNextIdles = flip $ foldr putNextIdle
 
 modifyIdle :: (a -> a) -> Pool a -> Pool a
 modifyIdle f p@Pool{ _elems, _idleElems }
@@ -91,11 +106,17 @@ markIdle id p@Pool{ _elems, _idleElems }
   | IM.member id _elems = p{ _idleElems = IS.insert id _idleElems }
   | otherwise = p
 
--- | incrementally build new elements in the pool
-buildPoolDiff_ :: P.NodeGraph t m => (Id -> a -> P.DynStateT (Pool a) t m ()) -> P.DynStateT (Pool a) t m ()
-buildPoolDiff_ onDiffItem = do
-    poolDiffE <- let f prev curr | diff <- difference curr prev
-                                 , not (null diff) = (curr, Just diff)
-                                 | otherwise       = (curr, Nothing)
-                 in P.askDyn >>= P.pushPostBuild >>= P.mapAccumMaybe f empty
-    P.buildEvent_ . P.ffor poolDiffE $ foldrWithId (\id ps -> (onDiffItem id ps >>)) (return ())
+traverseWithId :: Applicative f => (Id -> a -> f b) -> Pool a -> f [b]
+traverseWithId f = foldrWithId (\pid a acc -> (:) <$> f pid a <*> acc) (pure [])
+
+traverseWithId_ :: Applicative f => (Id -> a -> f ()) -> Pool a -> f ()
+traverseWithId_ f = foldrWithId (\pid a acc -> f pid a *> acc) (pure ())
+
+buildDiffs :: P.NodeGraph t m => (Id -> P.DynStateT t a m b) -> P.DynStateT t (Pool a) m (P.Event t [b])
+buildDiffs onDiff = do
+    let f prev curr | diff <- difference curr prev
+                    , not (null diff) = (Just curr, Just diff)
+                    | otherwise       = (Just curr, Nothing)
+    diffE <- P.mapAccumMaybe_ f empty =<< P.pushPostBuild =<< P.watch
+    P.buildEvent . P.ffor diffE . traverseWithId $ \pid ps -> do
+      P.focus (P.at pid . P.pnon ps) $ onDiff pid
